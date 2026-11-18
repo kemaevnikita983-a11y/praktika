@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Космическая оборона: Новые улучшения</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #1a1a2e; font-family: 'Courier New', Courier, monospace; }
+    #game {
+      position: relative; width: 800px; height: 600px; margin: 20px auto;
+      border: 4px solid #fff; background: radial-gradient(circle, #16213e 0%, #0f3460 100%);
+      box-shadow: 0 0 20px rgba(0,0,0,0.8);
+      overflow: hidden;
+    }
+    .enemy { position: absolute; max-width: 70px; max-height: 50px; cursor: crosshair; }
+    .player {
+      position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+      width: 60px; height: 70px; z-index: 5;
+    }
+    .bullet {
+      position: absolute; width: 6px; height: 16px; z-index: 10;
+      box-shadow: 0 0 8px #ffaaaa;
+    }
+    /* Цвета пуль для разных типов */
+    .bullet-normal { background: #ff4444; }
+    .bullet-blue { background: #44aaff; }
+    .bullet-green { background: #44ff44; box-shadow: 0 0 12px #0f0; }
+    .bullet-purple { background: #aa00ff; box-shadow: 0 0 12px #550088; }
+    .bullet-yellow { background: #ffff00; box-shadow: 0 0 12px #ffff00; }
+    
+    /* Сердце */
+    .heart {
+      position: absolute; width: 24px; height: 24px;
+      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="red"><path d="M16 28c-1.5 0-3-1-4-2.5C10 22 8 19 6 16c-4-6 0-14 8-14 4 0 7 3 8 7 1-4 4-7 8-7 8 0 12 8 8 14-2 3-4 6-6 9.5C19 27 17.5 28 16 28z"/></svg>');
+      background-size: contain; background-repeat: no-repeat;
+    }
+
+    /* UI */
+    #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+    #score { color: #fff; font-size: 24px; text-shadow: 2px 2px 0 #000; position: absolute; top: 10px; left: 10px; }
+    #ammo { color: #ffcc00; font-weight: bold; font-size: 24px; text-shadow: 2px 2px 0 #000; position: absolute; top: 10px; right: 10px; }
+    #lives { color: red; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 0 #000; position: absolute; top: 10px; left: 150px; }
+    #upgrade-hint {
+      color: #ffff00; font-weight: bold; font-size: 22px; text-shadow: 2px 2px 4px black;
+      position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+      pointer-events: none; display: none; text-align: center;
+    }
+    #message {
+      color: white; font-size: 36px; font-weight: bold; text-align: center;
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      display: none; text-shadow: 3px 3px 0 #000;
+    }
+    
+    @keyframes shake-full {
+      0% { transform: translate(5px, 5px) rotate(5deg); }
+      14% { transform: translate(-5px, -5px) rotate(-5deg); }
+      28% { transform: translate(5px, -5px) rotate(5deg); }
+      42% { transform: translate(-5px, 5px) rotate(-5deg); }
+      56% { transform: translate(5px, 5px) rotate(5deg); }
+      70% { transform: translate(-5px, -5px) rotate(-5deg); }
+      84% { transform: translate(5px, -5px) rotate(5deg); }
+      100% { transform: translate(0, 0) rotate(0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="ui-layer">
+      <div id="score">Счёт: 0</div>
+      <div id="lives">❤️ x 3</div>
+      <div id="ammo">Патроны: 10/10</div>
+      <div id="upgrade-hint">Новое улучшение!</div>
+    </div>
+    <div class="player" id="player"></div>
+    <div id="message">Игра окончена!<br><button onclick="location.reload()">Заново</button></div>
+  </div>
+
+  <script>
+    const game = document.getElementById('game');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const ammoEl = document.getElementById('ammo');
+    const upgradeHint = document.getElementById('upgrade-hint');
+    const messageEl = document.getElementById('message');
+    const player = document.getElementById('player');
+
+    let score = 0;
+    let lives = 3;
+    let playerX = game.clientWidth / 2 - 30;
+    const playerSpeed = 7;
+    const moveMap = {};
+
+    // --- Система патронов ---
+    let ammo = 10;
+    const maxAmmo = 10;
+    const reloadRate = 700; // мс
+    let lastReloadTime = Date.now();
+
+    // --- ПРОКАЧКА И УЛУЧШЕНИЯ (ТВОИ НОВЫЕ ПРАВИЛА) ---
+    const upgrades = [
+      { name: 'Стандартная', type: 'normal' },
+      { name: 'Широкий двойной', type: 'double' },
+      { name: 'Тройной веер', type: 'spread' },
+      // Уровень 4: 2 в центр, 2 в углы
+      { name: 'Крест и углы', type: 'cross_corners' }, 
+      // Уровень 5: 3 вверх, центр + стороны (+-80px)
+      { name: 'Вертикальный залп', type: 'vertical_spread' },
+      // Уровень 6: Веер + 1 случайная с рикошетом 2 раза
+      { name: 'Веер + Рикошет', type: 'spread_ricochet' },
+      // Уровень 7: Вперед + 2 по бокам (рикошет 2 раза)
+      { name: 'Боковые рикошеты', type: 'side_ricochet' },
+      // Уровень 8: Вертикальный залп + боковые рикошетят
+      { name: 'Залп с рикошетом', type: 'vertical_ricochet' },
+      // Уровень 9: 2 пули, одна прямая, вторая притягивается
+      { name: 'Дуэт с притяжением', type: 'duo_homing' },
+      // Уровень 10: 4 пули в разные стороны
+      { name: 'Разброс 360', type: 'scatter_360' },
+      // Уровень 11: Веер, боковые притягиваются
+      { name: 'Умный веер', type: 'smart_spread' },
+      // Уровень 12: Двойной + одна летит в центр экрана
+      { name: 'Двойной + Центр', type: 'double_center' }
+    ];
+
+    function getUpgradeLevel() {
+      return Math.min(Math.floor(score / 15), upgrades.length - 1);
+    }
+
+    // Картинка игрока
+    player.style.width = '60px';
+    player.style.height = '70px';
+    const playerImg = new Image();
+    playerImg.src = '2.png';
+    playerImg.onload = () => {
+      player.style.backgroundImage = `url('2.png')`;
+      player.style.backgroundSize = 'contain';
+      player.style.backgroundRepeat = 'no-repeat';
+    };
+    playerImg.onerror = () => { player.style.background = '#333'; };
+
+    // Управление
+    window.addEventListener('keydown', (e) => {
+      moveMap[e.code] = true;
+      if (e.key) moveMap[e.key] = true;
+    });
+    window.addEventListener('keyup', (e) => {
+      moveMap[e.code] = false;
+      if (e.key) moveMap[e.key] = false;
+    });
+
+    function updatePlayer() {
+      if (moveMap['ArrowLeft'] || moveMap['KeyA'] || moveMap['a'] || moveMap['ф'] || moveMap['Ф']) playerX -= playerSpeed;
+      if (moveMap['ArrowRight'] || moveMap['KeyD'] || moveMap['d'] || moveMap['в'] || moveMap['В']) playerX += playerSpeed;
+
+      const maxX = game.clientWidth - 60;
+      if (playerX < 0) playerX = 0;
+      if (playerX > maxX) playerX = maxX;
+      player.style.left = playerX + 'px';
+    }
+
+    // Пули
+    const bullets = [];
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        if (ammo > 0 && lives > 0) {
+          ammo--;
+          updateAmmoUI();
+          createBullets();
+          
+          const level = getUpgradeLevel();
+          if (upgrades[level].type === 'flash') { // Если вдруг вернем flash
+             player.style.boxShadow = '0 0 40px yellow';
+             setTimeout(() => { player.style.boxShadow = ''; }, 100);
+          }
+        } else if (lives <= 0) {
+          // Мертв
+        } else {
+          player.style.transform = 'translateX(-50%) scale(0.98)';
+          setTimeout(() => { player.style.transform = 'translateX(-50%)'; }, 50);
+        }
+      }
+    });
+
+    function createBullets() {
+      const shootX = playerX + 30; 
+      const startY = game.clientHeight - 90;
+      const level = getUpgradeLevel();
+      const type = upgrades[level].type;
+
+      if (type === 'normal') {
+        spawnBullet(shootX, startY, 0, -14, 'bullet-normal');
+      } 
+      else if (type === 'double') {
+        // 1-3 как раньше: увеличенная дистанция
+        spawnBullet(shootX - 16, startY, 0, -14, 'bullet-normal');
+        spawnBullet(shootX + 16, startY, 0, -14, 'bullet-normal');
+      }
+      else if (type === 'spread') {
+        spawnBullet(shootX, startY, 0, -15, 'bullet-blue');
+        spawnBullet(shootX - 10, startY, -4, -13, 'bullet-blue');
+        spawnBullet(shootX + 10, startY, 4, -13, 'bullet-blue');
+      }
+      // --- НОВЫЕ УРОВНИ ---
+      
+      // 4: 2 в центр и 2 в углы (влево-вверх, вправо-вверх)
+      else if (type === 'cross_corners') {
+        spawnBullet(shootX, startY - 10, 0, -12, 'bullet-purple'); // Центр чуть выше
+        spawnBullet(shootX, startY + 10, 0, -12, 'bullet-purple');
+        spawnBullet(shootX - 40, startY, -5, -8, 'bullet-purple');   // Угол влево
+        spawnBullet(shootX + 40, startY, 5, -8, 'bullet-purple');  // Угол вправо
+      }
+      
+      // 5: 3 пули вверх (центр + +-80px)
+      else if (type === 'vertical_spread') {
+        spawnBullet(shootX, startY, 0, -16, 'bullet-green');
+        spawnBullet(shootX - 80, startY, 0, -16, 'bullet-green');
+        spawnBullet(shootX + 80, startY, 0, -16, 'bullet-green');
+      }
+
+      // 6: Как на 3 уровне + 1 пуля с рандомным углом и 2 рикошетами
+      else if (type === 'spread_ricochet') {
+        // Веер (как уровень 3)
+        spawnBullet(shootX, startY, 0, -15, 'bullet-blue');
+        spawnBullet(shootX - 10, startY, -4, -13, 'bullet-blue');
+        spawnBullet(shootX + 10, startY, 4, -13, 'bullet-blue');
+        
+        // Специальная пуля с рикошетом
+        const angle = (Math.random() - 0.5) * 0.2; // Небольшой рандомный угол
+        spawnBullet(shootX, startY, angle * 10, -12, 'bullet-yellow', { ricochetCount: 0, maxRicochet: 2 });
+      }
+
+      // 7: 1 вперед, 2 по бокам, все 3 рикошетят 2 раза
+      else if (type === 'side_ricochet') {
+        spawnBullet(shootX, startY, 0, -16, 'bullet-green', { ricochetCount: 0, maxRicochet: 2 });
+        spawnBullet(shootX - 15, startY, -3, -14, 'bullet-green', { ricochetCount: 0, maxRicochet: 2 });
+        spawnBullet(shootX + 15, startY, 3, -14, 'bullet-green', { ricochetCount: 0, maxRicochet: 2 });
+      }
+
+      // 8: Как на 5 уровне, но боковые рикошетят 2 раза
+      else if (type === 'vertical_ricochet') {
+        spawnBullet(shootX, startY, 0, -16, 'bullet-green'); // Центральная без рикошета
+        spawnBullet(shootX - 80, startY, 0, -16, 'bullet-green', { ricochetCount: 0, maxRicochet: 2 });
+        spawnBullet(shootX + 80, startY, 0, -16, 'bullet-green', { ricochetCount: 0, maxRicochet: 2 });
+      }
+
+      // 9: 2 пули в одном месте. Одна прямая, вторая притягивается к цели
+      else if (type === 'duo_homing') {
+        // Пуля 1: летит строго прямо
+        spawnBullet(shootX, startY, 0, -16, 'bullet-normal');
+        
+        // Пуля 2: летит прямо, но имеет флаг homing (будет притягиваться в gameLoop)
+        spawnBullet(shootX, startY, 0, -16, 'bullet-blue', { isHoming: true });
+      }
+
+      // 10: 4 пули в разные стороны (без способностей)
+      else if (type === 'scatter_360') {
+        spawnBullet(shootX, startY, 0, -14, 'bullet-purple');   // Вверх
+        spawnBullet(shootX, startY, 14, 0, 'bullet-purple');    // Вправо
+        spawnBullet(shootX, startY, -14, 0, 'bullet-purple');   // Влево
+        spawnBullet(shootX, startY, 0, 14, 'bullet-purple');   // Вниз (для хаоса)
+      }
+
+      // 11: Веер как на 3 уровне, но боковые притягиваются к целям
+      else if (type === 'smart_spread') {
+        spawnBullet(shootX, startY, 0, -15, 'bullet-green'); // Центр - обычная
+        spawnBullet(shootX - 10, startY, -4, -13, 'bullet-green', { isHoming: true }); // Лево - с притяжением
+        spawnBullet(shootX + 10, startY, 4, -13, 'bullet-green', { isHoming: true });  // Право - с притяжением
+      }
+
+      // 12: Двойной выстрел (как уровень 2) + 1 пуля, летящая в центр экрана
+      else if (type === 'double_center') {
+        // Двойной (широкий разброс)
+        spawnBullet(shootX - 16, startY, 0, -14, 'bullet-yellow');
+        spawnBullet(shootX + 16, startY, 0, -14, 'bullet-yellow');
+
+        // Пуля в центр экрана (цель: X = 400, Y = 300 примерно)
+        const centerX = game.clientWidth / 2;
+        const vx = (centerX - shootX) * 0.08; // Коэффициент скорости по X
+        const vy = -12; // Базовая скорость вверх
+        spawnBullet(shootX, startY, vx, vy, 'bullet-red');
+      }
+    }
+
+    function spawnBullet(x, y, vx, vy, className, options = {}) {
+      const b = document.createElement('div');
+      b.className = `bullet ${className}`;
+      b.style.left = x + 'px';
+      b.style.top = y + 'px';
+      game.appendChild(b);
+
+      bullets.push({
+        el: b, x: x, y: y, vx: vx, vy: vy,
+        type: upgrades[getUpgradeLevel()].type,
+        isHoming: options.isHoming || false,
+        ricochetCount: options.ricochetCount || 0,
+        maxRicochet: options.maxRicochet || 0
+      });
+    }
+
+    // Враги и Сердца
+    const enemies = [];
+    const hearts = [];
+
+    function createEnemy() {
+      const enemy = document.createElement('img');
+      enemy.className = 'enemy';
+      enemy.src = '1.png';
+      enemy.onerror = () => { enemy.style.display = 'none'; };
+
+      enemy.style.left = Math.random() * (game.clientWidth - 70) + 'px';
+      enemy.style.top = '-60px';
+
+      // --- ИЗМЕНЕНИЕ: Уменьшена скорость врагов ---
+      enemies.push({
+        el: enemy, y: -60, speed: 1.5 + Math.random() * 1.5, // Было 2 + ..., стало медленнее
+        slowed: false, slowTimer: 0,
+        hasHeart: false
+      });
+
+      game.appendChild(enemy);
+    }
+
+    function decideHeartDrop() {
+      const level = getUpgradeLevel();
+      const chance = 0.001 + (level * 0.003); 
+      return Math.random() < chance;
+    }
+
+    setInterval(() => {
+      createEnemy();
+      if (decideHeartDrop()) {
+        const lastIdx = enemies.length - 1;
+        enemies[lastIdx].hasHeart = true;
+      }
+    }, 1200);
+
+    function createHeart(enemyObj) {
+      const heart = document.createElement('div');
+      heart.className = 'heart';
+      heart.style.left = enemyObj.el.style.left;
+      heart.style.top = enemyObj.y + 'px';
+      
+      hearts.push({
+        el: heart,
+        x: parseInt(enemyObj.el.style.left) || 0,
+        y: enemyObj.y
+      });
+      game.appendChild(heart);
+    }
+
+    // Игровой цикл
+    function gameLoop() {
+      updatePlayer();
+
+      // --- Перезарядка патронов ---
+      const now = Date.now();
+      if (ammo < maxAmmo) {
+        const timePassed = now - lastReloadTime;
+        const reloadsPossible = Math.floor(timePassed / reloadRate);
+        if (reloadsPossible > 0) {
+          ammo = Math.min(maxAmmo, ammo + reloadsPossible);
+          lastReloadTime += reloadsPossible * reloadRate;
+          updateAmmoUI();
+        }
+      }
+
+      // --- Движение и логика пуль ---
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+
+        // 1. Логика притяжения (Homing) - работает для уровней 9, 11
+        if (b.isHoming) {
+          let closestEnemy = null;
+          let minDist = 1000;
+          for (const e of enemies) {
+            const ex = parseInt(e.el.style.left) || 0;
+            const dist = Math.abs(ex - b.x);
+            if (dist < minDist && e.y < b.y) { // Ищем врага перед пулей
+              minDist = dist;
+              closestEnemy = e;
+            }
+          }
+          if (closestEnemy) {
+            const targetX = (parseInt(closestEnemy.el.style.left) || 0) + 35;
+            // Плавно поворачиваем пулю к цели
+            b.vx += (targetX - b.x) * 0.02; 
+          }
+        }
+
+        // 2. Логика рикошетов (Уровни 6, 7, 8)
+        if (b.maxRicochet > 0 && b.ricochetCount < b.maxRicochet) {
+          // Проверка столкновения со стенами
+          const width = game.clientWidth;
+          const height = game.clientHeight;
+          
+          // Рикошет от левой стены
+          if (b.x <= 0 && b.vx < 0) {
+            b.vx = -b.vx * 0.8;
+            b.ricochetCount++;
+          }
+          // Рикошет от правой стены
+          else if (b.x + 6 >= width && b.vx > 0) {
+            b.vx = -b.vx * 0.8;
+            b.ricochetCount++;
+          }
+          // Рикошет от верхней стены
+          else if (b.y <= 0 && b.vy < 0) {
+            b.vy = -b.vy * 0.8;
+            b.ricochetCount++;
+          }
+        }
+
+        b.x += b.vx;
+        b.y += b.vy;
+        b.el.style.left = b.x + 'px';
+        b.el.style.top = b.y + 'px';
+
+        // Удаление пуль за экраном
+        if (b.y < -20 || b.y > game.clientHeight + 20 || b.x < -20 || b.x > game.clientWidth + 20) {
+          b.el.remove();
+          bullets.splice(i, 1);
+          continue;
+        }
+
+        // Проверка попаданий по врагам
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          const ex = parseInt(e.el.style.left) || 0;
+          const ey = e.y;
+
+          // Простая проверка пересечения (AABB)
+          if (
+            b.y <= ey + 50 && b.y + 16 >= ey &&
+            b.x <= ex + 70 && b.x + 6 >= ex
+          ) {
+            // Эффект замедления (если пуля типа slow)
+            if (b.type === 'slow') {
+              e.slowed = true;
+              e.slowTimer = 2000; 
+            }
+
+            // Эффект пробивания (pierce) - если вдруг вернешь этот тип
+            if (b.type === 'pierce') {
+              b.pierceCount = (b.pierceCount || 0) + 1;
+              if (b.pierceCount >= 2) {
+                b.el.remove();
+                bullets.splice(i, 1);
+                i--; 
+                break; 
+              }
+              e.el.remove();
+              enemies.splice(j, 1);
+              if (e.hasHeart) createHeart(e);
+              score += 1;
+              checkUpgradeAndUI();
+              continue; 
+            } else {
+              // Обычная пуля: уничтожаем и пулю, и врага
+              b.el.remove();
+              bullets.splice(i, 1);
+            }
+            
+            e.el.remove();
+            enemies.splice(j, 1);
+
+            if (e.hasHeart) {
+              createHeart(e);
+            }
+
+            score += 1;
+            checkUpgradeAndUI();
+            break; 
+          }
+        }
+      }
+
+      // --- Движение врагов ---
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        
+        let currentSpeed = e.speed;
+        if (e.slowed && e.slowTimer > 0) {
+          currentSpeed *= 0.5;
+          e.slowTimer -= 16; 
+          if (e.slowTimer <= 0) e.slowed = false;
+        }
+
+        e.y += currentSpeed;
+        e.el.style.transform = `translateY(${e.y}px)`;
+
+        // Проигрыш: враг коснулся низа
+        if (e.y >= game.clientHeight - 80) {
+          e.el.remove();
+          enemies.splice(i, 1);
+          takeDamage(); 
+          continue; 
+        }
+      }
+
+      // --- Логика сердец (падение и подбор) ---
+      const playerRect = player.getBoundingClientRect();
+      const gameRect = game.getBoundingClientRect();
+      
+      for (let i = hearts.length - 1; i >= 0; i--) {
+        const h = hearts[i];
+        h.y += 2; 
+        h.el.style.top = h.y + 'px';
+
+        const heartCenterX = h.x + 12;
+        const playerCenterX = playerRect.left + 30; 
+        
+        if (Math.abs(heartCenterX - playerCenterX) < 40 && h.y > gameRect.bottom - 90) {
+          h.el.remove();
+          hearts.splice(i, 1);
+
+          if (lives === 3) {
+            ammo = Math.min(maxAmmo, ammo + 3);
+            updateAmmoUI();
+            player.style.boxShadow = '0 0 40px rgba(255, 0, 0, 0.5)';
+            setTimeout(() => { player.style.boxShadow = ''; }, 200);
+          } else {
+            lives = 3;
+            updateLivesUI();
+          }
+          break; 
+        }
+
+        if (h.y > game.clientHeight) {
+          h.el.remove();
+          hearts.splice(i, 1);
+        }
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function takeDamage() {
+      if (lives <= 0) return;
+      lives--;
+      updateLivesUI();
+      player.classList.add('shake-full');
+      setTimeout(() => {
+        player.classList.remove('shake-full');
+      }, 500);
+      if (lives <= 0) gameOver();
+    }
+
+    function gameOver() {
+      messageEl.style.display = 'block';
+      clearInterval(enemyInterval); 
+    }
+
+    function updateAmmoUI() { ammoEl.innerText = `Патроны: ${ammo}/${maxAmmo}`; }
+    function updateLivesUI() {
+      let heartsStr = '';
+      for (let i = 0; i < lives; i++) heartsStr += '❤️';
+      livesEl.innerText = `${heartsStr} x ${lives}`;
+    }
+
+    function checkUpgradeAndUI() {
+      scoreEl.innerText = 'Счёт: ' + score;
+      if (typeof checkUpgradeAndUI.lastLevel === 'undefined') checkUpgradeAndUI.lastLevel = -1;
+      const level = getUpgradeLevel();
+      if (level > checkUpgradeAndUI.lastLevel) {
+        upgradeHint.style.display = 'block';
+        setTimeout(() => { upgradeHint.style.display = 'none'; }, 1500);
+        checkUpgradeAndUI.lastLevel = level;
+      }
+    }
+
+    const enemyInterval = setInterval(createEnemy, 1200);
+    gameLoop();
+  </script>
+</body>
+</html>
+

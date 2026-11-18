@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Макет из Figma</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: sans-serif;
+        }
+
+        body {
+            background-color: #1a0505;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #ffffff;
+        }
+
+        /* Общий контейнер для фреймов */
+        .frame {
+            width: 1000px;
+            height: 600px;
+            background-color: #120303;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* --- ШАПКА --- */
+        .header-nav {
+            height: 60px;
+            background-color: #120303;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0 40px;
+            gap: 15px;
+        }
+
+        .nav-btn {
+            background-color: #ffffff;
+            color: #000000;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .nav-btn:hover {
+            background-color: #e0e0e0;
+        }
+
+        /* --- ФРЕЙМ 1 --- */
+        #frame1 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            padding: 20px 40px;
+            gap: 40px;
+            height: calc(100% - 60px);
+        }
+
+        /* Картинка большого персонажа слева */
+        .img-character-big {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 30px;
+        }
+
+        .right-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .white-card {
+            background-color: #ffffff;
+            color: #000000;
+            border-radius: 25px;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            flex-grow: 1;
+        }
+
+        .menu-item {
+            font-size: 1.1rem;
+            font-weight: 500;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #ccc;
+        }
+
+        /* Картинка маленькой головы в меню */
+        .img-character-small {
+            width: 100%;
+            height: 150px;
+            object-fit: contain;
+            border-radius: 20px;
+        }
+
+        /* --- ФРЕЙМ 2 --- */
+        #frame2 {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            height: 100%;
+        }
+
+        .sidebar {
+            background-color: #ff0000;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .sidebar-title {
+            background-color: #ffffff;
+            color: #000000;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+
+        .services-list {
+            list-style: none;
+        }
+
+        .services-list li {
+            font-size: 0.9rem;
+            color: #ffffff;
+            padding: 8px 0;
+            border-bottom: 1px solid #000000;
+        }
+
+        /* Картинка внизу красного сайдбара */
+        .sidebar-character-img {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            object-fit: contain;
+        }
+
+        .content-area {
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: flex-end;
+        }
+
+        /* Карточки для скриншотов справа */
+        .media-card {
+            width: 450px;
+            height: 180px;
+            border-radius: 25px;
+            overflow: hidden;
+        }
+
+        .media-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ФРЕЙМ 1 (Каталог) -->
+    <div id="container-frame1" class="frame">
+        <header class="header-nav">
+            <button class="nav-btn">Каталог</button>
+            <button class="nav-btn" onclick="showServices()">Услуги</button>
+        </header>
+
+        <main id="frame1">
+            <!-- КАРТИНКА: Большой робот слева -->
+            <img src="a008a8a3-2abb-44df-99dc-c1ebf0216922.jpeg" alt="Робот" class="img-character-big">
+
+            <div class="right-menu">
+                <div class="white-card">
+                    <div class="menu-item">Сотрудники</div>
+                    <div class="menu-item">Суммы услуг</div>
+                    <div class="menu-item">Все пункты</div>
+                </div>
+                <!-- КАРТИНКА: Голова робота под белым меню -->
+                <img src="2026-11-16_13-42.png" alt="Голова робота" class="img-character-small">
+            </div>
+        </main>
+    </div>
+
+    <!-- ФРЕЙМ 2 (Услуги) -->
+    <div id="container-frame2" class="frame hidden">
+        <div id="frame2">
+            <aside class="sidebar">
+                <div class="sidebar-title" onclick="showMain()">← Каталог услуг</div>
+                <ul class="services-list">
+                    <li>прототипы игр</li>
+                    <li>апдейт графики</li>
+                    <li>моделирование</li>
+                    <li>&nbsp;</li>
+                    <li>&nbsp;</li>
+                </ul>
+                <!-- КАРТИНКА: Персонаж внизу красного сайдбара -->
+                <img src="a008a8a3-2abb-44df-99dc-c1ebf0216922.jpeg" alt="Персонаж" class="sidebar-character-img">
+            </aside>
+
+            <main class="content-area">
+                <!-- КАРТИНКА: Верхний скриншот робота -->
+                <div class="media-card">
+                    <img src="Airbrush-IMAGE-ENHANCER-1794816213186-1794816213186.jpg" alt="Скриншот 1">
+                </div>
+                <!-- КАРТИНКА: Нижний скриншот робота (Битва) -->
+                <div class="media-card">
+                    <img src="Airbrush-IMAGE-ENHANCER-1794813801682-1794813801682.jpg" alt="Скриншот 2">
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        const frame1 = document.getElementById('container-frame1');
+        const frame2 = document.getElementById('container-frame2');
+
+        function showServices() {
+            frame1.classList.add('hidden');
+            frame2.classList.remove('hidden');
+        }
+
+        function showMain() {
+            frame2.classList.add('hidden');
+            frame1.classList.remove('hidden');
+        }
+    </script>
+
+</body>
+</html>
